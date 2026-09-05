@@ -1,0 +1,8 @@
+/build/
+/.cache/
+/.idea/
+/.vscode/
+*.swp
+*.prof
+*.nsys-rep
+*.ncu-rep
