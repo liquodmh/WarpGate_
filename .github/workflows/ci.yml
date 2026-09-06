@@ -12,6 +12,9 @@ jobs:
       - run: ctest --test-dir build --output-on-failure
       - run: ./build/warpgate_ann_bench 1000 32 20 l2 --json
       - run: ./build/warpgate_ann_bench 1000 32 20 cosine --json
+      - run: ./build/warpgate_traffic_sim 1000 steady 20000 --json
+      - run: ./build/warpgate_traffic_sim 1000 bursty 20000 --json
+      - run: ./build/warpgate_traffic_sim 1000 mixed-sla 12000 --json
   sanitizers:
     runs-on: ubuntu-latest
     steps:
