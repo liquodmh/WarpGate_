@@ -1,19 +1,35 @@
 #pragma once
 #include "warpgate/backend.hpp"
+#include "warpgate/distance.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <random>
 #include <span>
+#include <string>
 #include <vector>
 namespace warpgate {
-struct HnswConfig { std::size_t m{16}; std::size_t ef_construction{100}; std::size_t ef_search{64}; std::uint32_t seed{42}; };
+struct HnswConfig {
+    std::size_t m{16};
+    std::size_t ef_construction{100};
+    std::size_t ef_search{64};
+    std::uint32_t seed{42};
+    DistanceMetric metric{DistanceMetric::L2};
+    std::size_t workers{0};
+};
 class HnswBackend final : public SearchBackend {
 public:
     HnswBackend(std::vector<float> dataset, std::size_t rows, std::size_t dim, HnswConfig config = {});
     [[nodiscard]] std::string_view name() const noexcept override;
     [[nodiscard]] std::size_t preferred_max_batch() const noexcept override;
     std::vector<SearchResult> search(std::span<const SearchQuery> queries) override;
+    void save(const std::string& path) const;
+    [[nodiscard]] static HnswBackend load(const std::string& path, std::size_t workers = 0);
+    [[nodiscard]] std::size_t size() const noexcept { return rows_; }
+    [[nodiscard]] std::size_t dimension() const noexcept { return dim_; }
+    [[nodiscard]] DistanceMetric metric() const noexcept { return config_.metric; }
 private:
+    struct EmptyTag {};
+    explicit HnswBackend(EmptyTag) : rng_(42) {}
     struct Node { int level{}; std::vector<std::vector<std::size_t>> links; };
     struct Candidate { std::size_t id{}; float distance{}; };
     [[nodiscard]] std::span<const float> vector_at(std::size_t id) const;

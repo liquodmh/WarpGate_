@@ -10,7 +10,8 @@ jobs:
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWARPGATE_WARNINGS_AS_ERRORS=ON -DWARPGATE_ENABLE_AVX2=${{ matrix.avx2 }}
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
-      - run: ./build/warpgate_ann_bench 1000 32 20
+      - run: ./build/warpgate_ann_bench 1000 32 20 l2 --json
+      - run: ./build/warpgate_ann_bench 1000 32 20 cosine --json
   sanitizers:
     runs-on: ubuntu-latest
     steps:
