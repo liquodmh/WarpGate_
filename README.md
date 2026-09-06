@@ -1,48 +1,29 @@
 # WarpGate
 
-**SLA-aware heterogeneous runtime for real-time vector search on CPU + NVIDIA GPU.**
+**SLA-aware CPU/GPU runtime for real-time vector search.**
 
-WarpGate is not another vector database. It is a runtime layer for the awkward production case where clients send online vector-search requests one at a time while GPUs achieve their best efficiency on larger batches.
+WarpGate targets a production mismatch: clients often submit vector queries one at a time while accelerators are most efficient with batches. The runtime learns backend latency, orders work by deadline, forms micro-batches only when SLA budget allows, and routes across heterogeneous search backends.
 
-The core idea is simple: **wait only when waiting is safe**. WarpGate learns backend latency by batch size, watches each request deadline, forms micro-batches when there is latency budget, and routes work to the backend predicted to meet the SLA most efficiently.
+> **v0.2 CPU production core:** HNSW + AVX2 are implemented and tested. CUDA/cuVS is the hardware-backed next adapter; no GPU performance is claimed without real NVIDIA measurements.
 
-> Status: v0.1 scheduler/reference implementation. CUDA/cuVS numbers are intentionally not claimed until measured on real NVIDIA hardware.
+## Implemented
 
-## Why this project exists
-
-Offline ANN benchmarks commonly use convenient batch sizes. Production traffic often does not. A service can receive many independent `batch=1` requests, creating launch/copy/queue overhead and poor accelerator utilization.
-
-WarpGate targets this runtime gap:
+- C++20
+- exact L2 reference backend
+- hierarchical **HNSW from scratch**
+- scalar + optional **AVX2** distance kernels
+- earliest-deadline-first queue
+- SLA-aware adaptive micro-batching
+- EWMA latency model by batch size
+- exact-vs-HNSW Recall@K/QPS benchmark
+- scalar + AVX2 GitHub Actions matrix
+- ASan + UBSan CI
 
 ```text
-batch=1 clients
-      |
-      v
-+-------------------+
-| WarpGate runtime  |
-|-------------------|
-| deadline guard    |
-| micro-batcher     |
-| latency learner   |
-| CPU/GPU router    |
-+---------+---------+
-          |
-    +-----+------+
-    |            |
-    v            v
-CPU HNSW/SIMD  NVIDIA cuVS/CAGRA
+batch=1 clients -> EDF queue -> adaptive micro-batcher -> SLA router
+                                                    /           \
+                                            exact/HNSW+SIMD  cuVS/CAGRA
 ```
-
-## v0.1 implemented now
-
-- C++20 backend abstraction
-- exact L2 CPU reference backend
-- SLA/deadline-aware queueing
-- adaptive micro-batch planning
-- per-backend EWMA latency model by batch bucket
-- backend selection from observed latency
-- scheduler microbenchmark
-- unit tests + GitHub Actions CI
 
 ## Build
 
@@ -52,76 +33,37 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Run the local reference benchmark:
+AVX2: add `-DWARPGATE_ENABLE_AVX2=ON`.
+
+## Benchmarks
 
 ```bash
 ./build/warpgate_bench 50000 128 200
+./build/warpgate_ann_bench 20000 128 200
 ```
 
-Arguments are `rows dimension queries`.
+The ANN benchmark reports build time, exact QPS, HNSW QPS, Recall@K, and active distance kernel. Synthetic CPU results are regression data, not marketing claims.
 
-## The benchmark rule
+## NVIDIA path
 
-**No invented GPU numbers.** Every performance table in this repository must be generated from a committed benchmark command and record:
+`SearchBackend` is the adapter boundary for cuVS/CAGRA. The required hardware experiment compares immediate batch=1 CAGRA, concurrent streams, and WarpGate micro-batching under the **same recall target and p99 SLA**. See [docs/CUDA_CUVS.md](docs/CUDA_CUVS.md).
 
-- GPU model + driver
-- CUDA version
-- cuVS version/commit
-- CPU model
-- dataset + dimension + top-k
-- arrival pattern
-- recall target
-- p50/p95/p99
-- QPS
-- GPU utilization
+## Status
 
-The headline experiment for the NVIDIA path is:
+- [x] exact CPU baseline
+- [x] HNSW from scratch
+- [x] AVX2
+- [x] EDF scheduler
+- [x] adaptive latency model
+- [x] recall/QPS benchmark
+- [x] sanitizer CI
+- [ ] cuVS/CAGRA on NVIDIA hardware
+- [ ] CUDA stream pool + pinned memory
+- [ ] multi-GPU routing
+- [ ] NIXL / GPUDirect experiments
+- [ ] upstream benchmark/PR backed by measurements
 
-```text
-online workload from client: batch size = 1
-
-A) immediate request-by-request cuVS/CAGRA
-B) concurrent streams without adaptive batching
-C) WarpGate adaptive micro-batching
-
-constraint: same recall target and same p99 SLA
-objective: maximize throughput without violating p99
-```
-
-## What would count as a real result?
-
-Not “GPU is faster than CPU.” That is boring.
-
-A valuable result is something like:
-
-> Under batch=1 online traffic, WarpGate increases throughput at the same p99 latency target by dynamically deciding when to wait, batch, route, or execute immediately.
-
-The percentage belongs here only after measurement.
-
-## NVIDIA-focused roadmap
-
-1. CPU baseline: HNSW + AVX2/AVX-512 + profiling.
-2. Add cuVS/CAGRA backend.
-3. Add CUDA stream pool and pinned-memory pipeline.
-4. Benchmark batch=1 online traffic against naive cuVS execution.
-5. Add multi-GPU routing and per-GPU queue models.
-6. Experiment with NIXL / GPUDirect paths where hardware permits.
-7. Publish traces, benchmark scripts, and a technical report.
-8. Use the measurements to contribute an issue, benchmark, or PR upstream.
-
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [ROADMAP.md](docs/ROADMAP.md).
-
-## Intended engineering depth
-
-- Modern C++ and memory ownership
-- data structures and ANN algorithms
-- SIMD and CPU cache behavior
-- CUDA concurrency and stream scheduling
-- accelerator-aware queueing
-- latency/throughput/SLA tradeoffs
-- reproducible systems benchmarking
-- multi-GPU and high-performance data movement
+**Benchmark integrity:** record hardware, driver/CUDA/cuVS versions, dataset, dimension, top-k, arrival pattern, recall, p50/p95/p99, QPS, and memory/utilization.
 
 ## License
-
 MIT

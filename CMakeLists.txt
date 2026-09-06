@@ -1,32 +1,33 @@
 cmake_minimum_required(VERSION 3.24)
-project(warpgate VERSION 0.1.0 LANGUAGES CXX)
-
+project(warpgate VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 option(WARPGATE_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
-
-add_library(warpgate_core
-    src/cpu_exact_backend.cpp
-    src/latency_model.cpp
-    src/scheduler.cpp
-)
-
+option(WARPGATE_ENABLE_AVX2 "Enable AVX2 distance kernel" OFF)
+option(WARPGATE_ENABLE_SANITIZERS "Enable ASan+UBSan" OFF)
+add_library(warpgate_core src/cpu_exact_backend.cpp src/distance.cpp src/hnsw_backend.cpp src/latency_model.cpp src/scheduler.cpp)
 target_include_directories(warpgate_core PUBLIC include)
-
 target_compile_options(warpgate_core PRIVATE -Wall -Wextra -Wpedantic)
 if(WARPGATE_WARNINGS_AS_ERRORS)
   target_compile_options(warpgate_core PRIVATE -Werror)
 endif()
-
-add_executable(warpgate_bench apps/warpgate_bench.cpp)
-target_link_libraries(warpgate_bench PRIVATE warpgate_core)
-target_compile_options(warpgate_bench PRIVATE -Wall -Wextra -Wpedantic)
-
+if(WARPGATE_ENABLE_AVX2 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+  target_compile_options(warpgate_core PRIVATE -mavx2)
+  target_compile_definitions(warpgate_core PRIVATE WARPGATE_AVX2=1)
+endif()
+if(WARPGATE_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(warpgate_core PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+  target_link_options(warpgate_core PUBLIC -fsanitize=address,undefined)
+endif()
+foreach(app IN ITEMS warpgate_bench warpgate_ann_bench)
+  add_executable(${app} apps/${app}.cpp)
+  target_link_libraries(${app} PRIVATE warpgate_core)
+endforeach()
 add_executable(warpgate_tests tests/warpgate_tests.cpp)
 target_link_libraries(warpgate_tests PRIVATE warpgate_core)
-target_compile_options(warpgate_tests PRIVATE -Wall -Wextra -Wpedantic)
-
+add_executable(hnsw_tests tests/hnsw_tests.cpp)
+target_link_libraries(hnsw_tests PRIVATE warpgate_core)
 enable_testing()
 add_test(NAME warpgate_tests COMMAND warpgate_tests)
+add_test(NAME hnsw_tests COMMAND hnsw_tests)
