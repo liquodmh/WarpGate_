@@ -49,20 +49,26 @@ int main(int argc, char** argv) {
         double offered_qps = 20000.0;
         auto pattern = warpgate::TrafficPattern::Steady;
         bool json = false;
+        std::string profile_path;
 
         if (argc > 1) requests = static_cast<std::size_t>(std::stoull(argv[1]));
         if (argc > 2) pattern = parse_pattern(argv[2]);
         if (argc > 3) offered_qps = std::stod(argv[3]);
-        if (argc > 4 && std::string(argv[4]) == "--json") json = true;
+        for (int i = 4; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if (arg == "--json") json = true;
+            else profile_path = arg;
+        }
 
         const auto trace = warpgate::make_traffic_trace(requests, pattern, offered_qps, 5000, 42);
-        const warpgate::ServiceModel service{};
+        const auto service = profile_path.empty() ? warpgate::ServiceModel{} : warpgate::ServiceModel::from_csv(profile_path);
 
         if (!json) {
             std::cout << "Synthetic online traffic simulation (NOT a GPU benchmark)\n"
                       << "pattern=" << warpgate::traffic_pattern_name(pattern)
                       << " offered_qps=" << offered_qps
-                      << " requests=" << requests << "\n\n"
+                      << " requests=" << requests
+                      << " service=" << (service.uses_measured_profile() ? "measured" : "synthetic") << "\n\n"
                       << std::left << std::setw(10) << "policy"
                       << std::right << std::setw(12) << "throughput"
                       << std::setw(10) << "p50_us"

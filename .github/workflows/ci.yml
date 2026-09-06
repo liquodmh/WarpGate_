@@ -15,6 +15,8 @@ jobs:
       - run: ./build/warpgate_traffic_sim 1000 steady 20000 --json
       - run: ./build/warpgate_traffic_sim 1000 bursty 20000 --json
       - run: ./build/warpgate_traffic_sim 1000 mixed-sla 12000 --json
+      - run: ./build/warpgate_batch_profile 1000 32 32 /tmp/warpgate-profile.csv
+      - run: ./build/warpgate_traffic_sim 1000 steady 5000 --json /tmp/warpgate-profile.csv
   sanitizers:
     runs-on: ubuntu-latest
     steps:
