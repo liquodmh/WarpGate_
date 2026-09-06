@@ -4,7 +4,7 @@
 
 WarpGate targets a production mismatch: online clients often send vector-search requests one at a time while high-throughput backends are most efficient on batches. The runtime learns backend latency, orders work by deadline, batches only when SLA budget allows, and routes across heterogeneous search backends.
 
-> **v0.3 CPU/runtime core:** HNSW, AVX2, cosine/L2 metrics, parallel batch search, index persistence, EDF scheduling, reproducible JSON benchmarks, and sanitizer CI are implemented. CUDA/cuVS remains intentionally gated on real NVIDIA hardware measurements.
+> **v0.4 runtime science:** HNSW, AVX2, cosine/L2 metrics, parallel batch search, index persistence, EDF scheduling, reproducible JSON benchmarks, and sanitizer CI are implemented. CUDA/cuVS remains intentionally gated on real NVIDIA hardware measurements.
 
 ## Implemented
 
@@ -19,6 +19,7 @@ WarpGate targets a production mismatch: online clients often send vector-search 
 - EWMA latency model by batch size
 - exact-vs-HNSW Recall@K/QPS benchmark
 - machine-readable JSON benchmark output
+- deterministic online traffic simulator with p50/p95/p99, SLA misses, batching and queue-depth metrics
 - scalar + AVX2 GitHub Actions matrix
 - ASan + UBSan CI
 
@@ -61,6 +62,16 @@ auto restored = warpgate::HnswBackend::load("index.wghnsw");
 
 The current binary format is versioned (`WGHNSW01`) and intended for WarpGate-controlled deployments.
 
+## Online traffic simulation
+
+```bash
+./build/warpgate_traffic_sim 5000 steady 20000
+./build/warpgate_traffic_sim 5000 bursty 20000 --json
+./build/warpgate_traffic_sim 5000 mixed-sla 12000 --json
+```
+
+The simulator replays the same synthetic trace through immediate, fixed-batch, and adaptive policies. Its service curve is synthetic and is **not a GPU benchmark**. See [docs/ONLINE_SIMULATION.md](docs/ONLINE_SIMULATION.md).
+
 ## NVIDIA path
 
 `SearchBackend` is the adapter boundary for cuVS/CAGRA. The hardware experiment must compare immediate batch=1 CAGRA, concurrent CUDA streams, and WarpGate micro-batching under the **same recall target and p99 SLA**. No GPU performance claim belongs in this repository until reproduced on real NVIDIA hardware.
@@ -79,9 +90,10 @@ See [docs/CUDA_CUVS.md](docs/CUDA_CUVS.md).
 - [x] adaptive latency model
 - [x] recall/QPS + JSON benchmark
 - [x] sanitizer CI
+- [x] p50/p95/p99 online traffic simulation
+- [x] steady/bursty/mixed-SLA trace replay
 - [ ] cuVS/CAGRA adapter on NVIDIA hardware
 - [ ] CUDA stream pool + pinned memory
-- [ ] p50/p95/p99 online traffic replay
 - [ ] multi-GPU routing
 - [ ] NIXL / GPUDirect experiments
 - [ ] upstream benchmark/PR backed by measurements
