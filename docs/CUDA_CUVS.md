@@ -1,0 +1,2 @@
+# CUDA / cuVS integration contract
+The GPU adapter stays behind `SearchBackend`. It must keep the index resident, reuse pinned buffers, use a bounded stream pool, consume scheduler micro-batches, return real timings, expose queue/utilization/memory pressure, and record GPU/driver/CUDA/cuVS versions. Required experiment: same batch=1 traffic, recall target, and p99 SLA for immediate CAGRA vs concurrent streams vs WarpGate. No GPU claim without reproducible hardware measurements.
