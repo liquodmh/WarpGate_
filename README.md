@@ -4,7 +4,7 @@
 
 WarpGate targets a production mismatch: online clients often send vector-search requests one at a time while high-throughput backends are most efficient on batches. The runtime learns backend latency, orders work by deadline, batches only when SLA budget allows, and routes across heterogeneous search backends.
 
-> **v0.4 runtime science:** HNSW, AVX2, cosine/L2 metrics, parallel batch search, index persistence, EDF scheduling, reproducible JSON benchmarks, and sanitizer CI are implemented. CUDA/cuVS remains intentionally gated on real NVIDIA hardware measurements.
+> **v0.5 measured-model calibration:** HNSW, AVX2, cosine/L2 metrics, parallel batch search, index persistence, EDF scheduling, reproducible JSON benchmarks, and sanitizer CI are implemented. CUDA/cuVS remains intentionally gated on real NVIDIA hardware measurements.
 
 ## Implemented
 
@@ -20,6 +20,7 @@ WarpGate targets a production mismatch: online clients often send vector-search 
 - exact-vs-HNSW Recall@K/QPS benchmark
 - machine-readable JSON benchmark output
 - deterministic online traffic simulator with p50/p95/p99, SLA misses, batching and queue-depth metrics
+- measured batch-latency profile generation/loading for hardware-backed scheduler calibration
 - scalar + AVX2 GitHub Actions matrix
 - ASan + UBSan CI
 
@@ -70,7 +71,14 @@ The current binary format is versioned (`WGHNSW01`) and intended for WarpGate-co
 ./build/warpgate_traffic_sim 5000 mixed-sla 12000 --json
 ```
 
-The simulator replays the same synthetic trace through immediate, fixed-batch, and adaptive policies. Its service curve is synthetic and is **not a GPU benchmark**. See [docs/ONLINE_SIMULATION.md](docs/ONLINE_SIMULATION.md).
+The simulator replays the same trace through immediate, fixed-batch, and adaptive policies. By default its service curve is synthetic and is **not a GPU benchmark**. WarpGate can also consume a measured batch-latency CSV.
+
+```bash
+./build/warpgate_batch_profile 5000 128 32 profile.csv
+./build/warpgate_traffic_sim 5000 steady 12000 --json profile.csv
+```
+
+Today the profiler targets the CPU HNSW backend; the same calibration path is intended for real cuVS/CAGRA measurements. See [docs/ONLINE_SIMULATION.md](docs/ONLINE_SIMULATION.md).
 
 ## NVIDIA path
 
@@ -92,6 +100,7 @@ See [docs/CUDA_CUVS.md](docs/CUDA_CUVS.md).
 - [x] sanitizer CI
 - [x] p50/p95/p99 online traffic simulation
 - [x] steady/bursty/mixed-SLA trace replay
+- [x] measured batch-latency profiles + CSV calibration
 - [ ] cuVS/CAGRA adapter on NVIDIA hardware
 - [ ] CUDA stream pool + pinned memory
 - [ ] multi-GPU routing

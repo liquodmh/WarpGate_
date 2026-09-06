@@ -1,6 +1,8 @@
 #include "warpgate/traffic_simulator.hpp"
 
 #include <cassert>
+#include <cstdio>
+#include <fstream>
 #include <iostream>
 
 int main() {
@@ -35,6 +37,20 @@ int main() {
     const auto d = warpgate::simulate_traffic(mixed, service, adaptive);
     assert(d.requests == mixed.size());
     assert(d.p99_us >= d.p50_us);
+
+    const char* profile_path = "warpgate_test_profile.csv";
+    {
+        std::ofstream out(profile_path);
+        out << "batch_size,latency_us\n1,200\n4,300\n8,420\n";
+    }
+    const auto measured = warpgate::ServiceModel::from_csv(profile_path);
+    assert(measured.uses_measured_profile());
+    assert(measured.predict(1) == 200.0);
+    assert(measured.predict(4) == 300.0);
+    assert(measured.predict(2) > 200.0 && measured.predict(2) < 300.0);
+    const auto e = warpgate::simulate_traffic(trace, measured, adaptive);
+    assert(e.requests == trace.size());
+    std::remove(profile_path);
 
     std::cout << "traffic simulator tests passed\n";
 }

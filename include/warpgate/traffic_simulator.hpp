@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -16,12 +17,20 @@ struct TrafficRequest {
     std::uint64_t deadline_us{};
 };
 
+struct LatencyPoint {
+    std::size_t batch_size{};
+    double latency_us{};
+};
+
 struct ServiceModel {
     double launch_overhead_us{180.0};
     double per_query_us{35.0};
     double batch_exponent{0.70};
+    std::vector<LatencyPoint> measured_profile;
 
     [[nodiscard]] double predict(std::size_t batch_size) const;
+    [[nodiscard]] bool uses_measured_profile() const noexcept { return !measured_profile.empty(); }
+    [[nodiscard]] static ServiceModel from_csv(const std::string& path);
 };
 
 struct TrafficSimConfig {

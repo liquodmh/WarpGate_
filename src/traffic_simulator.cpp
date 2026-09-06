@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <random>
+#include <sstream>
+#include <string>
 #include <stdexcept>
 #include <vector>
 
@@ -72,10 +75,55 @@ std::size_t select_batch_size(const std::vector<TrafficRequest>& pending,
 
 double ServiceModel::predict(std::size_t batch_size) const {
     if (batch_size == 0) return 0.0;
+    if (!measured_profile.empty()) {
+        if (batch_size <= measured_profile.front().batch_size) return measured_profile.front().latency_us;
+        for (std::size_t i = 1; i < measured_profile.size(); ++i) {
+            if (batch_size <= measured_profile[i].batch_size) {
+                const auto& a = measured_profile[i - 1];
+                const auto& b = measured_profile[i];
+                const double width = static_cast<double>(b.batch_size - a.batch_size);
+                const double x = static_cast<double>(batch_size - a.batch_size) / width;
+                return a.latency_us + x * (b.latency_us - a.latency_us);
+            }
+        }
+        const auto& last = measured_profile.back();
+        return last.latency_us * static_cast<double>(batch_size) / static_cast<double>(last.batch_size);
+    }
     if (launch_overhead_us < 0.0 || per_query_us < 0.0 || batch_exponent <= 0.0) {
         throw std::invalid_argument("invalid service model");
     }
     return launch_overhead_us + per_query_us * std::pow(static_cast<double>(batch_size), batch_exponent);
+}
+
+ServiceModel ServiceModel::from_csv(const std::string& path) {
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot open latency profile");
+    ServiceModel model;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        if (line.find("batch_size") != std::string::npos) continue;
+        std::stringstream ss(line);
+        std::string batch_text;
+        std::string latency_text;
+        if (!std::getline(ss, batch_text, ',') || !std::getline(ss, latency_text)) {
+            throw std::runtime_error("invalid latency profile row");
+        }
+        const auto batch = static_cast<std::size_t>(std::stoull(batch_text));
+        const auto latency = std::stod(latency_text);
+        if (batch == 0 || !(latency > 0.0)) throw std::runtime_error("invalid latency profile value");
+        model.measured_profile.push_back({batch, latency});
+    }
+    if (model.measured_profile.empty()) throw std::runtime_error("latency profile is empty");
+    std::sort(model.measured_profile.begin(), model.measured_profile.end(), [](const LatencyPoint& a, const LatencyPoint& b) {
+        return a.batch_size < b.batch_size;
+    });
+    for (std::size_t i = 1; i < model.measured_profile.size(); ++i) {
+        if (model.measured_profile[i - 1].batch_size == model.measured_profile[i].batch_size) {
+            throw std::runtime_error("duplicate batch size in latency profile");
+        }
+    }
+    return model;
 }
 
 std::vector<TrafficRequest> make_traffic_trace(std::size_t request_count,
